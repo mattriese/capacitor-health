@@ -277,7 +277,7 @@ struct AuthorizationStatusPayload {
 final class Health {
     private let healthStore = HKHealthStore()
     private let isoFormatter: ISO8601DateFormatter
-    
+
     /// Small time offset (in seconds) added to the last workout's end date to avoid duplicate results in pagination
     private let paginationOffsetSeconds: TimeInterval = 0.001
 
@@ -385,31 +385,7 @@ final class Health {
                     return
                 }
 
-                let results = categorySamples.map { sample -> [String: Any] in
-                    let sleepValue = sample.value
-                    let durationMinutes = sample.endDate.timeIntervalSince(sample.startDate) / 60.0
-                    
-                    var payload: [String: Any] = [
-                        "dataType": dataType.rawValue,
-                        "value": durationMinutes,
-                        "unit": dataType.unitIdentifier,
-                        "startDate": self.isoFormatter.string(from: sample.startDate),
-                        "endDate": self.isoFormatter.string(from: sample.endDate)
-                    ]
-                    
-                    // Map HKCategoryValueSleepAnalysis to sleep state
-                    let sleepState = self.sleepStateFromValue(sleepValue)
-                    if let sleepState = sleepState {
-                        payload["sleepState"] = sleepState
-                    }
-
-                    let source = sample.sourceRevision.source
-                    payload["sourceName"] = source.name
-                    payload["sourceId"] = source.bundleIdentifier
-
-                    return payload
-                }
-
+                let results = categorySamples.map { self.convertCategorySample($0, dataType: dataType) }
                 completion(.success(results))
             }
             healthStore.execute(query)
@@ -430,29 +406,13 @@ final class Health {
                 return
             }
 
-            let results = quantitySamples.map { sample -> [String: Any] in
-                let value = sample.quantity.doubleValue(for: dataType.defaultUnit)
-                var payload: [String: Any] = [
-                    "dataType": dataType.rawValue,
-                    "value": value,
-                    "unit": dataType.unitIdentifier,
-                    "startDate": self.isoFormatter.string(from: sample.startDate),
-                    "endDate": self.isoFormatter.string(from: sample.endDate)
-                ]
-
-                let source = sample.sourceRevision.source
-                payload["sourceName"] = source.name
-                payload["sourceId"] = source.bundleIdentifier
-
-                return payload
-            }
-
+            let results = quantitySamples.map { self.convertQuantitySample($0, dataType: dataType) }
             completion(.success(results))
         }
 
         healthStore.execute(query)
     }
-    
+
     private func sleepStateFromValue(_ value: Int) -> String? {
         switch value {
         case HKCategoryValueSleepAnalysis.inBed.rawValue:
@@ -511,13 +471,13 @@ final class Health {
             // If value is 0 or not specified, default to asleep (HKCategoryValueSleepAnalysis.asleep.rawValue)
             let sleepValue = Int(value) == 0 ? HKCategoryValueSleepAnalysis.asleep.rawValue : Int(value)
             let sample = HKCategorySample(type: categoryType, value: sleepValue, start: startDate, end: endDate, metadata: metadataDictionary)
-            
+
             healthStore.save(sample) { success, error in
                 if let error = error {
                     completion(.failure(error))
                     return
                 }
-                
+
                 if success {
                     completion(.success(()))
                 } else {
@@ -637,7 +597,7 @@ final class Health {
     private func parseTypesWithWorkouts(_ identifiers: [String]) throws -> ([HealthDataType], Bool) {
         var types: [HealthDataType] = []
         var includeWorkouts = false
-        
+
         for identifier in identifiers {
             if identifier == "workouts" {
                 includeWorkouts = true
@@ -648,7 +608,7 @@ final class Health {
                 types.append(type)
             }
         }
-        
+
         return (types, includeWorkouts)
     }
 
@@ -712,38 +672,38 @@ final class Health {
     func queryAggregated(dataTypeIdentifier: String, startDateString: String?, endDateString: String?, bucketString: String?, aggregationString: String?, completion: @escaping (Result<[String: Any], Error>) -> Void) {
         do {
             let dataType = try parseDataType(identifier: dataTypeIdentifier)
-            
+
             // Sleep aggregation is not supported as it's categorical data
             if dataType == .sleep {
                 completion(.failure(HealthManagerError.operationFailed("Aggregated queries are not supported for sleep data. Use readSamples instead.")))
                 return
             }
-            
+
             // Instantaneous measurement types don't support meaningful aggregation
             // These should use readSamples instead
             if dataType == .respiratoryRate || dataType == .oxygenSaturation || dataType == .heartRateVariability {
                 completion(.failure(HealthManagerError.operationFailed("Aggregated queries are not supported for \(dataType.rawValue). Use readSamples instead.")))
                 return
             }
-            
+
             let quantityType = try dataType.quantityType()
-            
+
             let startDate = try parseDate(startDateString, defaultValue: Date().addingTimeInterval(-86400))
             let endDate = try parseDate(endDateString, defaultValue: Date())
-            
+
             guard endDate >= startDate else {
                 completion(.failure(HealthManagerError.invalidDateRange))
                 return
             }
-            
+
             // Default bucket is "day" and default aggregation is "sum" (consistent with TypeScript defaults)
             let bucket = bucketString ?? "day"
             let aggregation = aggregationString ?? "sum"
-            
+
             // Determine the anchor date and interval based on bucket type
             var anchorComponents = Calendar.current.dateComponents([.year, .month, .day], from: startDate)
             var intervalComponents = DateComponents()
-            
+
             switch bucket {
             case "hour":
                 anchorComponents.hour = 0
@@ -760,12 +720,12 @@ final class Health {
             default:
                 intervalComponents.day = 1
             }
-            
+
             guard let anchor = Calendar.current.date(from: anchorComponents) else {
                 completion(.failure(HealthManagerError.operationFailed("Failed to create anchor date")))
                 return
             }
-            
+
             // Determine the statistics options based on aggregation type
             var options: HKStatisticsOptions = []
             switch aggregation {
@@ -780,9 +740,9 @@ final class Health {
             default:
                 options = .cumulativeSum
             }
-            
+
             let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
-            
+
             let query = HKStatisticsCollectionQuery(
                 quantityType: quantityType,
                 quantitySamplePredicate: predicate,
@@ -790,25 +750,25 @@ final class Health {
                 anchorDate: anchor,
                 intervalComponents: intervalComponents
             )
-            
+
             query.initialResultsHandler = { [weak self] _, collection, error in
                 guard let self = self else { return }
-                
+
                 if let error = error {
                     completion(.failure(error))
                     return
                 }
-                
+
                 guard let collection = collection else {
                     completion(.success(["samples": []]))
                     return
                 }
-                
+
                 var samples: [[String: Any]] = []
-                
+
                 collection.enumerateStatistics(from: startDate, to: endDate) { statistics, _ in
                     var value: Double?
-                    
+
                     switch aggregation {
                     case "sum":
                         value = statistics.sumQuantity()?.doubleValue(for: dataType.defaultUnit)
@@ -821,7 +781,7 @@ final class Health {
                     default:
                         value = statistics.sumQuantity()?.doubleValue(for: dataType.defaultUnit)
                     }
-                    
+
                     if let value = value {
                         let sample: [String: Any] = [
                             "startDate": self.isoFormatter.string(from: statistics.startDate),
@@ -832,10 +792,10 @@ final class Health {
                         samples.append(sample)
                     }
                 }
-                
+
                 completion(.success(["samples": samples]))
             }
-            
+
             healthStore.execute(query)
         } catch {
             completion(.failure(error))
@@ -944,5 +904,182 @@ final class Health {
         }
 
         healthStore.execute(query)
+    }
+
+    // MARK: - Changes API
+
+    func getChangesToken(dataTypeIdentifier: String, sinceString: String?, completion: @escaping (Result<String, Error>) -> Void) {
+        do {
+            let dataType = try parseDataType(identifier: dataTypeIdentifier)
+            let sampleType = try dataType.sampleType()
+
+            var predicate: NSPredicate?
+            if let sinceString = sinceString {
+                let sinceDate = try parseDate(sinceString, defaultValue: Date().addingTimeInterval(-86400))
+                predicate = HKQuery.predicateForSamples(withStart: sinceDate, end: nil, options: [])
+            }
+
+            let query = HKAnchoredObjectQuery(
+                type: sampleType,
+                predicate: predicate,
+                anchor: nil,
+                limit: HKObjectQueryNoLimit
+            ) { [weak self] _, _, _, newAnchor, error in
+                guard let self = self else { return }
+
+                if let error = error {
+                    completion(.failure(error))
+                    return
+                }
+
+                guard let anchor = newAnchor else {
+                    completion(.failure(HealthManagerError.operationFailed("Failed to create anchor")))
+                    return
+                }
+
+                do {
+                    let token = try self.serializeAnchor(anchor)
+                    completion(.success(token))
+                } catch {
+                    completion(.failure(error))
+                }
+            }
+
+            healthStore.execute(query)
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
+    func getChanges(dataTypeIdentifier: String, token: String, completion: @escaping (Result<[String: Any], Error>) -> Void) throws {
+        let dataType = try parseDataType(identifier: dataTypeIdentifier)
+        let sampleType = try dataType.sampleType()
+
+        let anchor: HKQueryAnchor
+        do {
+            anchor = try deserializeAnchor(token)
+        } catch {
+            // Invalid token — auto-recover by getting a fresh token
+            getChangesToken(dataTypeIdentifier: dataTypeIdentifier, sinceString: nil) { tokenResult in
+                switch tokenResult {
+                case .success(let freshToken):
+                    completion(.success([
+                        "samples": [] as [[String: Any]],
+                        "nextToken": freshToken,
+                        "tokenExpired": true
+                    ]))
+                case .failure(let tokenError):
+                    completion(.failure(tokenError))
+                }
+            }
+            return
+        }
+
+        let query = HKAnchoredObjectQuery(
+            type: sampleType,
+            predicate: nil,
+            anchor: anchor,
+            limit: HKObjectQueryNoLimit
+        ) { [weak self] _, addedObjects, _, newAnchor, error in
+            guard let self = self else { return }
+
+            if let error = error {
+                completion(.failure(error))
+                return
+            }
+
+            guard let newAnchor = newAnchor else {
+                completion(.failure(HealthManagerError.operationFailed("Failed to get new anchor")))
+                return
+            }
+
+            var results: [[String: Any]] = []
+            if let samples = addedObjects {
+                results = samples.compactMap { sample in
+                    if dataType == .sleep, let categorySample = sample as? HKCategorySample {
+                        var payload = self.convertCategorySample(categorySample, dataType: dataType)
+                        payload["recordId"] = categorySample.uuid.uuidString
+                        return payload
+                    } else if let quantitySample = sample as? HKQuantitySample {
+                        var payload = self.convertQuantitySample(quantitySample, dataType: dataType)
+                        payload["recordId"] = quantitySample.uuid.uuidString
+                        return payload
+                    }
+                    return nil
+                }
+            }
+
+            do {
+                let nextToken = try self.serializeAnchor(newAnchor)
+                completion(.success([
+                    "samples": results,
+                    "nextToken": nextToken,
+                    "tokenExpired": false
+                ]))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+
+        healthStore.execute(query)
+    }
+
+    // MARK: - Sample Conversion Helpers
+
+    private func convertQuantitySample(_ sample: HKQuantitySample, dataType: HealthDataType) -> [String: Any] {
+        let value = sample.quantity.doubleValue(for: dataType.defaultUnit)
+        var payload: [String: Any] = [
+            "dataType": dataType.rawValue,
+            "value": value,
+            "unit": dataType.unitIdentifier,
+            "startDate": isoFormatter.string(from: sample.startDate),
+            "endDate": isoFormatter.string(from: sample.endDate)
+        ]
+
+        let source = sample.sourceRevision.source
+        payload["sourceName"] = source.name
+        payload["sourceId"] = source.bundleIdentifier
+
+        return payload
+    }
+
+    private func convertCategorySample(_ sample: HKCategorySample, dataType: HealthDataType) -> [String: Any] {
+        let durationMinutes = sample.endDate.timeIntervalSince(sample.startDate) / 60.0
+
+        var payload: [String: Any] = [
+            "dataType": dataType.rawValue,
+            "value": durationMinutes,
+            "unit": dataType.unitIdentifier,
+            "startDate": isoFormatter.string(from: sample.startDate),
+            "endDate": isoFormatter.string(from: sample.endDate)
+        ]
+
+        let sleepState = sleepStateFromValue(sample.value)
+        if let sleepState = sleepState {
+            payload["sleepState"] = sleepState
+        }
+
+        let source = sample.sourceRevision.source
+        payload["sourceName"] = source.name
+        payload["sourceId"] = source.bundleIdentifier
+
+        return payload
+    }
+
+    // MARK: - Anchor Serialization
+
+    private func serializeAnchor(_ anchor: HKQueryAnchor) throws -> String {
+        let data = try NSKeyedArchiver.archivedData(withRootObject: anchor, requiringSecureCoding: true)
+        return data.base64EncodedString()
+    }
+
+    private func deserializeAnchor(_ token: String) throws -> HKQueryAnchor {
+        guard let data = Data(base64Encoded: token) else {
+            throw HealthManagerError.operationFailed("Invalid anchor token format")
+        }
+        guard let anchor = try NSKeyedUnarchiver.unarchivedObject(ofClass: HKQueryAnchor.self, from: data) else {
+            throw HealthManagerError.operationFailed("Failed to deserialize anchor")
+        }
+        return anchor
     }
 }

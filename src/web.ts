@@ -4,6 +4,10 @@ import type {
   AuthorizationOptions,
   AuthorizationStatus,
   AvailabilityResult,
+  GetChangesOptions,
+  GetChangesResult,
+  GetChangesTokenOptions,
+  GetChangesTokenResult,
   HealthPlugin,
   QueryAggregatedOptions,
   QueryAggregatedResult,
@@ -57,5 +61,13 @@ export class HealthWeb extends WebPlugin implements HealthPlugin {
 
   async queryAggregated(_options: QueryAggregatedOptions): Promise<QueryAggregatedResult> {
     throw this.unimplemented('Querying aggregated data is only available on native platforms.');
+  }
+
+  async getChangesToken(_options: GetChangesTokenOptions): Promise<GetChangesTokenResult> {
+    throw this.unimplemented('Changes tracking is only available on native platforms.');
+  }
+
+  async getChanges(_options: GetChangesOptions): Promise<GetChangesResult> {
+    throw this.unimplemented('Changes tracking is only available on native platforms.');
   }
 }

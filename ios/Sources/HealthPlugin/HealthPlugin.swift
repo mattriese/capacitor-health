@@ -16,7 +16,9 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "openHealthConnectSettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "showPrivacyPolicy", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "queryWorkouts", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "queryAggregated", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "queryAggregated", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getChangesToken", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getChanges", returnType: CAPPluginReturnPromise)
     ]
 
     private let implementation = Health()
@@ -201,6 +203,53 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
                     call.reject(error.localizedDescription, nil, error)
                 }
             }
+        }
+    }
+
+    @objc func getChangesToken(_ call: CAPPluginCall) {
+        guard let dataType = call.getString("dataType") else {
+            call.reject("dataType is required")
+            return
+        }
+
+        let since = call.getString("since")
+
+        implementation.getChangesToken(dataTypeIdentifier: dataType, sinceString: since) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case let .success(token):
+                    call.resolve(["token": token])
+                case let .failure(error):
+                    call.reject(error.localizedDescription, nil, error)
+                }
+            }
+        }
+    }
+
+    @objc func getChanges(_ call: CAPPluginCall) {
+        guard let dataType = call.getString("dataType") else {
+            call.reject("dataType is required")
+            return
+        }
+
+        guard let token = call.getString("token") else {
+            call.reject("token is required")
+            return
+        }
+
+        do {
+            try implementation.getChanges(dataTypeIdentifier: dataType, token: token) { result in
+                DispatchQueue.main.async {
+                    switch result {
+                    case let .success(response):
+                        call.resolve(response)
+                    case let .failure(error):
+                        call.reject(error.localizedDescription, nil, error)
+                    }
+                }
+            }
+        } catch {
+            call.reject(error.localizedDescription, nil, error)
         }
     }
 

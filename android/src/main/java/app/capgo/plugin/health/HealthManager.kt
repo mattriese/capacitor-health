@@ -30,6 +30,8 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import androidx.health.connect.client.changes.UpsertionChange
+import androidx.health.connect.client.request.ChangesTokenRequest
 import kotlin.math.min
 import kotlin.collections.buildSet
 import kotlinx.coroutines.CancellationException
@@ -665,6 +667,143 @@ class HealthManager {
         // Note: customMetadata is not available on Metadata in Health Connect
         // Metadata only contains dataOrigin, device, and lastModifiedTime
         
+        return payload
+    }
+
+    suspend fun getChangesToken(
+        client: HealthConnectClient,
+        dataType: HealthDataType
+    ): String {
+        val request = ChangesTokenRequest(
+            recordTypes = setOf(dataType.recordClass)
+        )
+        return client.getChangesToken(request)
+    }
+
+    suspend fun getChanges(
+        client: HealthConnectClient,
+        dataType: HealthDataType,
+        token: String
+    ): JSObject {
+        val samples = JSArray()
+        var currentToken = token
+        var tokenExpired = false
+
+        try {
+            do {
+                val response = client.getChanges(currentToken)
+
+                if (response.changesTokenExpired) {
+                    tokenExpired = true
+                    currentToken = getChangesToken(client, dataType)
+                    break
+                }
+
+                for (change in response.changes) {
+                    if (change is UpsertionChange) {
+                        val record = change.record
+                        when (record) {
+                            is StepsRecord -> {
+                                samples.put(createSamplePayloadWithMetadata(
+                                    HealthDataType.STEPS, record.startTime, record.endTime,
+                                    record.count.toDouble(), record.metadata
+                                ))
+                            }
+                            is DistanceRecord -> {
+                                samples.put(createSamplePayloadWithMetadata(
+                                    HealthDataType.DISTANCE, record.startTime, record.endTime,
+                                    record.distance.inMeters, record.metadata
+                                ))
+                            }
+                            is ActiveCaloriesBurnedRecord -> {
+                                samples.put(createSamplePayloadWithMetadata(
+                                    HealthDataType.CALORIES, record.startTime, record.endTime,
+                                    record.energy.inKilocalories, record.metadata
+                                ))
+                            }
+                            is WeightRecord -> {
+                                samples.put(createSamplePayloadWithMetadata(
+                                    HealthDataType.WEIGHT, record.time, record.time,
+                                    record.weight.inKilograms, record.metadata
+                                ))
+                            }
+                            is HeartRateRecord -> {
+                                for (sample in record.samples) {
+                                    samples.put(createSamplePayloadWithMetadata(
+                                        HealthDataType.HEART_RATE, sample.time, sample.time,
+                                        sample.beatsPerMinute.toDouble(), record.metadata
+                                    ))
+                                }
+                            }
+                            is SleepSessionRecord -> {
+                                val durationMinutes = Duration.between(record.startTime, record.endTime).toMinutes().toDouble()
+                                samples.put(createSamplePayloadWithMetadata(
+                                    HealthDataType.SLEEP, record.startTime, record.endTime,
+                                    durationMinutes, record.metadata
+                                ))
+                            }
+                            is RespiratoryRateRecord -> {
+                                samples.put(createSamplePayloadWithMetadata(
+                                    HealthDataType.RESPIRATORY_RATE, record.time, record.time,
+                                    record.rate, record.metadata
+                                ))
+                            }
+                            is OxygenSaturationRecord -> {
+                                samples.put(createSamplePayloadWithMetadata(
+                                    HealthDataType.OXYGEN_SATURATION, record.time, record.time,
+                                    record.percentage.value, record.metadata
+                                ))
+                            }
+                            is RestingHeartRateRecord -> {
+                                samples.put(createSamplePayloadWithMetadata(
+                                    HealthDataType.RESTING_HEART_RATE, record.time, record.time,
+                                    record.beatsPerMinute.toDouble(), record.metadata
+                                ))
+                            }
+                            is HeartRateVariabilityRmssdRecord -> {
+                                samples.put(createSamplePayloadWithMetadata(
+                                    HealthDataType.HEART_RATE_VARIABILITY, record.time, record.time,
+                                    record.heartRateVariabilityMillis, record.metadata
+                                ))
+                            }
+                        }
+                    }
+                }
+
+                currentToken = response.nextChangesToken
+            } while (response.hasMore)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Only treat as token expiry if the Changes API explicitly indicated it.
+            // The changesTokenExpired flag (checked above in the loop) is the primary
+            // detection mechanism. This catch handles the case where the SDK throws
+            // an exception for an invalid/expired token instead of setting the flag.
+            if (e.message?.contains("token", ignoreCase = true) == true) {
+                tokenExpired = true
+                currentToken = getChangesToken(client, dataType)
+            } else {
+                throw e
+            }
+        }
+
+        return JSObject().apply {
+            put("samples", samples)
+            put("nextToken", currentToken)
+            put("tokenExpired", tokenExpired)
+        }
+    }
+
+    private fun createSamplePayloadWithMetadata(
+        dataType: HealthDataType,
+        startTime: Instant,
+        endTime: Instant,
+        value: Double,
+        metadata: Metadata
+    ): JSObject {
+        val payload = createSamplePayload(dataType, startTime, endTime, value, metadata)
+        payload.put("recordId", metadata.id)
+        payload.put("lastModifiedTime", formatter.format(metadata.lastModifiedTime))
         return payload
     }
 

@@ -434,6 +434,63 @@ class HealthPlugin : Plugin() {
         }
     }
 
+    @PluginMethod
+    fun getChangesToken(call: PluginCall) {
+        val identifier = call.getString("dataType")
+        if (identifier.isNullOrBlank()) {
+            call.reject("dataType is required")
+            return
+        }
+
+        val dataType = HealthDataType.from(identifier)
+        if (dataType == null) {
+            call.reject("Unsupported data type: $identifier")
+            return
+        }
+
+        pluginScope.launch {
+            val client = getClientOrReject(call) ?: return@launch
+            try {
+                val token = manager.getChangesToken(client, dataType)
+                val result = JSObject().apply { put("token", token) }
+                call.resolve(result)
+            } catch (e: Exception) {
+                call.reject(e.message ?: "Failed to get changes token.", null, e)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun getChanges(call: PluginCall) {
+        val identifier = call.getString("dataType")
+        if (identifier.isNullOrBlank()) {
+            call.reject("dataType is required")
+            return
+        }
+
+        val dataType = HealthDataType.from(identifier)
+        if (dataType == null) {
+            call.reject("Unsupported data type: $identifier")
+            return
+        }
+
+        val token = call.getString("token")
+        if (token.isNullOrBlank()) {
+            call.reject("token is required")
+            return
+        }
+
+        pluginScope.launch {
+            val client = getClientOrReject(call) ?: return@launch
+            try {
+                val result = manager.getChanges(client, dataType, token)
+                call.resolve(result)
+            } catch (e: Exception) {
+                call.reject(e.message ?: "Failed to get changes.", null, e)
+            }
+        }
+    }
+
     companion object {
         private const val DEFAULT_LIMIT = 100
         private val DEFAULT_PAST_DURATION: Duration = Duration.ofDays(1)
