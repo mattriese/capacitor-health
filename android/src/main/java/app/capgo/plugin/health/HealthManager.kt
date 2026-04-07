@@ -40,6 +40,10 @@ class HealthManager {
 
     private val formatter: DateTimeFormatter = DateTimeFormatter.ISO_INSTANT
 
+    private fun isRecoverableChangesCursorException(error: Exception): Boolean {
+        return isRecoverableChangesCursorMessage(error.message)
+    }
+
     fun permissionsFor(readTypes: Collection<HealthDataType>, writeTypes: Collection<HealthDataType>, includeWorkouts: Boolean = false): Set<String> = buildSet {
         readTypes.forEach { add(it.readPermission) }
         writeTypes.forEach { add(it.writePermission) }
@@ -775,11 +779,16 @@ class HealthManager {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // Only treat as token expiry if the Changes API explicitly indicated it.
-            // The changesTokenExpired flag (checked above in the loop) is the primary
-            // detection mechanism. This catch handles the case where the SDK throws
-            // an exception for an invalid/expired token instead of setting the flag.
-            if (e.message?.contains("token", ignoreCase = true) == true) {
+            // The explicit changesTokenExpired flag is the primary detection path.
+            // Some devices instead surface cursor corruption as an exception while
+            // decoding the Changes payload. Treat those as recoverable by rotating
+            // the token so callers can fall back to a bounded full read.
+            if (isRecoverableChangesCursorException(e)) {
+                android.util.Log.w(
+                    "HealthManager",
+                    "Changes cursor rejected for ${dataType.identifier}; rotating token.",
+                    e
+                )
                 tokenExpired = true
                 currentToken = getChangesToken(client, dataType)
             } else {
@@ -810,5 +819,12 @@ class HealthManager {
     companion object {
         private const val DEFAULT_PAGE_SIZE = 100
         private const val MAX_PAGE_SIZE = 500
+
+        internal fun isRecoverableChangesCursorMessage(message: String?): Boolean {
+            val safeMessage = message.orEmpty()
+            return safeMessage.contains("token", ignoreCase = true) ||
+                safeMessage.contains("Protocol message contained an invalid tag", ignoreCase = true) ||
+                safeMessage.contains("invalid tag", ignoreCase = true)
+        }
     }
 }
