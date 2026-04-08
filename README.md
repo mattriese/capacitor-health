@@ -295,10 +295,13 @@ const { samples: avgHR } = await Health.queryAggregated({
 * [`readSamples(...)`](#readsamples)
 * [`saveSample(...)`](#savesample)
 * [`getPluginVersion()`](#getpluginversion)
+* [`getPluginInfo()`](#getplugininfo)
 * [`openHealthConnectSettings()`](#openhealthconnectsettings)
 * [`showPrivacyPolicy()`](#showprivacypolicy)
 * [`queryWorkouts(...)`](#queryworkouts)
 * [`queryAggregated(...)`](#queryaggregated)
+* [`getChangesToken(...)`](#getchangestoken)
+* [`getChanges(...)`](#getchanges)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
 
@@ -399,6 +402,22 @@ Get the native Capacitor plugin version
 --------------------
 
 
+### getPluginInfo()
+
+```typescript
+getPluginInfo() => Promise<PluginInfoResult>
+```
+
+Returns build metadata for the plugin: both the semver version and a
+`buildId` (a git short hash stamped at yalc push time, or "dev" if built
+without the push script). Use this to verify the running plugin matches
+the expected source version when iterating locally via yalc.
+
+**Returns:** <code>Promise&lt;<a href="#plugininforesult">PluginInfoResult</a>&gt;</code>
+
+--------------------
+
+
 ### openHealthConnectSettings()
 
 ```typescript
@@ -472,6 +491,52 @@ Supported on iOS (HealthKit) and Android (Health Connect).
 --------------------
 
 
+### getChangesToken(...)
+
+```typescript
+getChangesToken(options: GetChangesTokenOptions) => Promise<GetChangesTokenResult>
+```
+
+Gets a changes token for tracking new or modified samples of a given data type.
+Tokens are per-data-type — call once per type you want to track.
+
+On Android: wraps HealthConnectClient.getChangesToken().
+On iOS: initializes an HKAnchoredObjectQuery anchor.
+
+| Param         | Type                                                                      | Description                                |
+| ------------- | ------------------------------------------------------------------------- | ------------------------------------------ |
+| **`options`** | <code><a href="#getchangestokenoptions">GetChangesTokenOptions</a></code> | Data type and optional initial date filter |
+
+**Returns:** <code>Promise&lt;<a href="#getchangestokenresult">GetChangesTokenResult</a>&gt;</code>
+
+--------------------
+
+
+### getChanges(...)
+
+```typescript
+getChanges(options: GetChangesOptions) => Promise<GetChangesResult>
+```
+
+Gets all new or modified samples since the given token was issued.
+Returns only upserts (new/modified records), not deletions.
+
+If the token has expired (Android: 30 days of non-use), returns tokenExpired: true
+with a fresh token in nextToken. The caller should perform a full re-read via
+readSamples to catch up on missed data, then resume using the new token.
+
+On Android: wraps HealthConnectClient.getChanges() with automatic pagination.
+On iOS: runs HKAnchoredObjectQuery from the saved anchor.
+
+| Param         | Type                                                            | Description                                                            |
+| ------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **`options`** | <code><a href="#getchangesoptions">GetChangesOptions</a></code> | Data type and token from a previous getChangesToken or getChanges call |
+
+**Returns:** <code>Promise&lt;<a href="#getchangesresult">GetChangesResult</a>&gt;</code>
+
+--------------------
+
+
 ### Interfaces
 
 
@@ -511,16 +576,18 @@ Supported on iOS (HealthKit) and Android (Health Connect).
 
 #### HealthSample
 
-| Prop             | Type                                                      | Description                                                                                  |
-| ---------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| **`dataType`**   | <code><a href="#healthdatatype">HealthDataType</a></code> |                                                                                              |
-| **`value`**      | <code>number</code>                                       |                                                                                              |
-| **`unit`**       | <code><a href="#healthunit">HealthUnit</a></code>         |                                                                                              |
-| **`startDate`**  | <code>string</code>                                       |                                                                                              |
-| **`endDate`**    | <code>string</code>                                       |                                                                                              |
-| **`sourceName`** | <code>string</code>                                       |                                                                                              |
-| **`sourceId`**   | <code>string</code>                                       |                                                                                              |
-| **`sleepState`** | <code><a href="#sleepstate">SleepState</a></code>         | For sleep data, indicates the sleep state (e.g., 'asleep', 'awake', 'rem', 'deep', 'light'). |
+| Prop                   | Type                                                      | Description                                                                                  |
+| ---------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **`dataType`**         | <code><a href="#healthdatatype">HealthDataType</a></code> |                                                                                              |
+| **`value`**            | <code>number</code>                                       |                                                                                              |
+| **`unit`**             | <code><a href="#healthunit">HealthUnit</a></code>         |                                                                                              |
+| **`startDate`**        | <code>string</code>                                       |                                                                                              |
+| **`endDate`**          | <code>string</code>                                       |                                                                                              |
+| **`sourceName`**       | <code>string</code>                                       |                                                                                              |
+| **`sourceId`**         | <code>string</code>                                       |                                                                                              |
+| **`sleepState`**       | <code><a href="#sleepstate">SleepState</a></code>         | For sleep data, indicates the sleep state (e.g., 'asleep', 'awake', 'rem', 'deep', 'light'). |
+| **`recordId`**         | <code>string</code>                                       | Unique record identifier from the native health store (populated by getChanges).             |
+| **`lastModifiedTime`** | <code>string</code>                                       | When the record was last modified in the health store, ISO 8601 (populated by getChanges).   |
 
 
 #### QueryOptions
@@ -544,6 +611,14 @@ Supported on iOS (HealthKit) and Android (Health Connect).
 | **`startDate`** | <code>string</code>                                             | ISO 8601 start date for the sample. Defaults to now.                                                                                                                                              |
 | **`endDate`**   | <code>string</code>                                             | ISO 8601 end date for the sample. Defaults to startDate.                                                                                                                                          |
 | **`metadata`**  | <code><a href="#record">Record</a>&lt;string, string&gt;</code> | Metadata key-value pairs forwarded to the native APIs where supported.                                                                                                                            |
+
+
+#### PluginInfoResult
+
+| Prop          | Type                | Description                                                                                                                                                                                                                                   |
+| ------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`version`** | <code>string</code> | The native plugin version (semver, e.g. "7.2.14").                                                                                                                                                                                            |
+| **`buildId`** | <code>string</code> | Git short hash stamped at yalc push time, or "dev" if built without the push script (or "web" when running on the web stub). Use this to verify the running plugin matches the expected source version during local development against yalc. |
 
 
 #### QueryWorkoutsResult
@@ -607,6 +682,38 @@ Supported on iOS (HealthKit) and Android (Health Connect).
 | **`endDate`**     | <code>string</code>                                         | Exclusive ISO 8601 end date (defaults to now).           |
 | **`bucket`**      | <code><a href="#buckettype">BucketType</a></code>           | Time bucket for aggregation (defaults to 'day').         |
 | **`aggregation`** | <code><a href="#aggregationtype">AggregationType</a></code> | Aggregation operation to perform (defaults to 'sum').    |
+
+
+#### GetChangesTokenResult
+
+| Prop        | Type                | Description                                                            |
+| ----------- | ------------------- | ---------------------------------------------------------------------- |
+| **`token`** | <code>string</code> | Opaque token string for use with getChanges. Platform-specific format. |
+
+
+#### GetChangesTokenOptions
+
+| Prop           | Type                                                      | Description                                                                                                                                                                                                                                   |
+| -------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`dataType`** | <code><a href="#healthdatatype">HealthDataType</a></code> | The data type to track changes for. One token per data type.                                                                                                                                                                                  |
+| **`since`**    | <code>string</code>                                       | Optional ISO 8601 date to limit the initial fetch scope (primarily for iOS). On iOS, limits the initial HKAnchoredObjectQuery to records after this date. On Android, this parameter is ignored (tokens are scoped to "from now" by the API). |
+
+
+#### GetChangesResult
+
+| Prop               | Type                        | Description                                                                                                                                                                                                                                                                                                                        |
+| ------------------ | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`samples`**      | <code>HealthSample[]</code> | New or modified samples since the token was issued.                                                                                                                                                                                                                                                                                |
+| **`nextToken`**    | <code>string</code>         | Token for the next getChanges call. Always present.                                                                                                                                                                                                                                                                                |
+| **`tokenExpired`** | <code>boolean</code>        | True if the token was invalid or expired. When true, samples will be empty and nextToken will contain a fresh token. The caller should perform a full re-read via readSamples to catch up on missed data. On Android: tokens expire after 30 days of non-use. On iOS: anchors don't expire, but invalid tokens will set this flag. |
+
+
+#### GetChangesOptions
+
+| Prop           | Type                                                      | Description                                                           |
+| -------------- | --------------------------------------------------------- | --------------------------------------------------------------------- |
+| **`dataType`** | <code><a href="#healthdatatype">HealthDataType</a></code> | The data type to query changes for. Must match the token's data type. |
+| **`token`**    | <code>string</code>                                       | The token from a previous getChangesToken or getChanges call.         |
 
 
 ### Type Aliases

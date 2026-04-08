@@ -58,6 +58,10 @@ export interface HealthSample {
   sourceId?: string;
   /** For sleep data, indicates the sleep state (e.g., 'asleep', 'awake', 'rem', 'deep', 'light'). */
   sleepState?: SleepState;
+  /** Unique record identifier from the native health store (populated by getChanges). */
+  recordId?: string;
+  /** When the record was last modified in the health store, ISO 8601 (populated by getChanges). */
+  lastModifiedTime?: string;
 }
 
 export interface ReadSamplesResult {
@@ -185,6 +189,56 @@ export interface QueryAggregatedResult {
   samples: AggregatedSample[];
 }
 
+export interface GetChangesTokenOptions {
+  /** The data type to track changes for. One token per data type. */
+  dataType: HealthDataType;
+  /**
+   * Optional ISO 8601 date to limit the initial fetch scope (primarily for iOS).
+   * On iOS, limits the initial HKAnchoredObjectQuery to records after this date.
+   * On Android, this parameter is ignored (tokens are scoped to "from now" by the API).
+   */
+  since?: string;
+}
+
+export interface GetChangesTokenResult {
+  /** Opaque token string for use with getChanges. Platform-specific format. */
+  token: string;
+}
+
+export interface GetChangesOptions {
+  /** The data type to query changes for. Must match the token's data type. */
+  dataType: HealthDataType;
+  /** The token from a previous getChangesToken or getChanges call. */
+  token: string;
+}
+
+export interface GetChangesResult {
+  /** New or modified samples since the token was issued. */
+  samples: HealthSample[];
+  /** Token for the next getChanges call. Always present. */
+  nextToken: string;
+  /**
+   * True if the token was invalid or expired. When true, samples will be empty
+   * and nextToken will contain a fresh token. The caller should perform a full
+   * re-read via readSamples to catch up on missed data.
+   * On Android: tokens expire after 30 days of non-use.
+   * On iOS: anchors don't expire, but invalid tokens will set this flag.
+   */
+  tokenExpired: boolean;
+}
+
+export interface PluginInfoResult {
+  /** The native plugin version (semver, e.g. "7.2.14"). */
+  version: string;
+  /**
+   * Git short hash stamped at yalc push time, or "dev" if built without the
+   * push script (or "web" when running on the web stub). Use this to verify
+   * the running plugin matches the expected source version during local
+   * development against yalc.
+   */
+  buildId: string;
+}
+
 export interface HealthPlugin {
   /** Returns whether the current platform supports the native health SDK. */
   isAvailable(): Promise<AvailabilityResult>;
@@ -204,6 +258,14 @@ export interface HealthPlugin {
    * @throws An error if something went wrong
    */
   getPluginVersion(): Promise<{ version: string }>;
+
+  /**
+   * Returns build metadata for the plugin: both the semver version and a
+   * `buildId` (a git short hash stamped at yalc push time, or "dev" if built
+   * without the push script). Use this to verify the running plugin matches
+   * the expected source version when iterating locally via yalc.
+   */
+  getPluginInfo(): Promise<PluginInfoResult>;
 
   /**
    * Opens the Health Connect settings screen (Android only).
@@ -253,4 +315,34 @@ export interface HealthPlugin {
    * @throws An error if something went wrong
    */
   queryAggregated(options: QueryAggregatedOptions): Promise<QueryAggregatedResult>;
+
+  /**
+   * Gets a changes token for tracking new or modified samples of a given data type.
+   * Tokens are per-data-type — call once per type you want to track.
+   *
+   * On Android: wraps HealthConnectClient.getChangesToken().
+   * On iOS: initializes an HKAnchoredObjectQuery anchor.
+   *
+   * @param options Data type and optional initial date filter
+   * @returns A promise that resolves with an opaque token string
+   * @throws An error if the data type is unsupported or Health SDK is unavailable
+   */
+  getChangesToken(options: GetChangesTokenOptions): Promise<GetChangesTokenResult>;
+
+  /**
+   * Gets all new or modified samples since the given token was issued.
+   * Returns only upserts (new/modified records), not deletions.
+   *
+   * If the token has expired (Android: 30 days of non-use), returns tokenExpired: true
+   * with a fresh token in nextToken. The caller should perform a full re-read via
+   * readSamples to catch up on missed data, then resume using the new token.
+   *
+   * On Android: wraps HealthConnectClient.getChanges() with automatic pagination.
+   * On iOS: runs HKAnchoredObjectQuery from the saved anchor.
+   *
+   * @param options Data type and token from a previous getChangesToken or getChanges call
+   * @returns A promise with new samples, next token, and optional expiry flag
+   * @throws An error if the data type is unsupported or Health SDK is unavailable
+   */
+  getChanges(options: GetChangesOptions): Promise<GetChangesResult>;
 }

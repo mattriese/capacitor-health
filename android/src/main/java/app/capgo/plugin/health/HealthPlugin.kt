@@ -325,6 +325,15 @@ class HealthPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun getPluginInfo(call: PluginCall) {
+        val result = JSObject().apply {
+            put("version", pluginVersion)
+            put("buildId", PluginBuildInfo.BUILD_ID)
+        }
+        call.resolve(result)
+    }
+
+    @PluginMethod
     fun openHealthConnectSettings(call: PluginCall) {
         try {
             val intent = Intent(HEALTH_CONNECT_SETTINGS_ACTION)
@@ -430,6 +439,63 @@ class HealthPlugin : Plugin() {
                 call.reject(e.message ?: "Unsupported aggregation.", null, e)
             } catch (e: Exception) {
                 call.reject(e.message ?: "Failed to query aggregated data.", null, e)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun getChangesToken(call: PluginCall) {
+        val identifier = call.getString("dataType")
+        if (identifier.isNullOrBlank()) {
+            call.reject("dataType is required")
+            return
+        }
+
+        val dataType = HealthDataType.from(identifier)
+        if (dataType == null) {
+            call.reject("Unsupported data type: $identifier")
+            return
+        }
+
+        pluginScope.launch {
+            val client = getClientOrReject(call) ?: return@launch
+            try {
+                val token = manager.getChangesToken(client, dataType)
+                val result = JSObject().apply { put("token", token) }
+                call.resolve(result)
+            } catch (e: Exception) {
+                call.reject(e.message ?: "Failed to get changes token.", null, e)
+            }
+        }
+    }
+
+    @PluginMethod
+    fun getChanges(call: PluginCall) {
+        val identifier = call.getString("dataType")
+        if (identifier.isNullOrBlank()) {
+            call.reject("dataType is required")
+            return
+        }
+
+        val dataType = HealthDataType.from(identifier)
+        if (dataType == null) {
+            call.reject("Unsupported data type: $identifier")
+            return
+        }
+
+        val token = call.getString("token")
+        if (token.isNullOrBlank()) {
+            call.reject("token is required")
+            return
+        }
+
+        pluginScope.launch {
+            val client = getClientOrReject(call) ?: return@launch
+            try {
+                val result = manager.getChanges(client, dataType, token)
+                call.resolve(result)
+            } catch (e: Exception) {
+                call.reject(e.message ?: "Failed to get changes.", null, e)
             }
         }
     }
