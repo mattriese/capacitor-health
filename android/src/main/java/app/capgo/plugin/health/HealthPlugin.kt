@@ -325,6 +325,15 @@ class HealthPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun getPluginInfo(call: PluginCall) {
+        val result = JSObject().apply {
+            put("version", pluginVersion)
+            put("buildId", PluginBuildInfo.BUILD_ID)
+        }
+        call.resolve(result)
+    }
+
+    @PluginMethod
     fun openHealthConnectSettings(call: PluginCall) {
         try {
             val intent = Intent(HEALTH_CONNECT_SETTINGS_ACTION)

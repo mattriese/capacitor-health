@@ -13,6 +13,7 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "readSamples", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "saveSample", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPluginVersion", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getPluginInfo", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openHealthConnectSettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "showPrivacyPolicy", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "queryWorkouts", returnType: CAPPluginReturnPromise),
@@ -138,6 +139,13 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func getPluginVersion(_ call: CAPPluginCall) {
         call.resolve(["version": self.pluginVersion])
+    }
+
+    @objc func getPluginInfo(_ call: CAPPluginCall) {
+        call.resolve([
+            "version": self.pluginVersion,
+            "buildId": PluginBuildInfo.BUILD_ID
+        ])
     }
 
     @objc func openHealthConnectSettings(_ call: CAPPluginCall) {

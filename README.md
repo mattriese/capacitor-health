@@ -295,6 +295,7 @@ const { samples: avgHR } = await Health.queryAggregated({
 * [`readSamples(...)`](#readsamples)
 * [`saveSample(...)`](#savesample)
 * [`getPluginVersion()`](#getpluginversion)
+* [`getPluginInfo()`](#getplugininfo)
 * [`openHealthConnectSettings()`](#openhealthconnectsettings)
 * [`showPrivacyPolicy()`](#showprivacypolicy)
 * [`queryWorkouts(...)`](#queryworkouts)
@@ -397,6 +398,22 @@ getPluginVersion() => Promise<{ version: string; }>
 Get the native Capacitor plugin version
 
 **Returns:** <code>Promise&lt;{ version: string; }&gt;</code>
+
+--------------------
+
+
+### getPluginInfo()
+
+```typescript
+getPluginInfo() => Promise<PluginInfoResult>
+```
+
+Returns build metadata for the plugin: both the semver version and a
+`buildId` (a git short hash stamped at yalc push time, or "dev" if built
+without the push script). Use this to verify the running plugin matches
+the expected source version when iterating locally via yalc.
+
+**Returns:** <code>Promise&lt;<a href="#plugininforesult">PluginInfoResult</a>&gt;</code>
 
 --------------------
 
@@ -594,6 +611,14 @@ On iOS: runs HKAnchoredObjectQuery from the saved anchor.
 | **`startDate`** | <code>string</code>                                             | ISO 8601 start date for the sample. Defaults to now.                                                                                                                                              |
 | **`endDate`**   | <code>string</code>                                             | ISO 8601 end date for the sample. Defaults to startDate.                                                                                                                                          |
 | **`metadata`**  | <code><a href="#record">Record</a>&lt;string, string&gt;</code> | Metadata key-value pairs forwarded to the native APIs where supported.                                                                                                                            |
+
+
+#### PluginInfoResult
+
+| Prop          | Type                | Description                                                                                                                                                                                                                                   |
+| ------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`version`** | <code>string</code> | The native plugin version (semver, e.g. "7.2.14").                                                                                                                                                                                            |
+| **`buildId`** | <code>string</code> | Git short hash stamped at yalc push time, or "dev" if built without the push script (or "web" when running on the web stub). Use this to verify the running plugin matches the expected source version during local development against yalc. |
 
 
 #### QueryWorkoutsResult

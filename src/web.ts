@@ -9,6 +9,7 @@ import type {
   GetChangesTokenOptions,
   GetChangesTokenResult,
   HealthPlugin,
+  PluginInfoResult,
   QueryAggregatedOptions,
   QueryAggregatedResult,
   QueryOptions,
@@ -45,6 +46,10 @@ export class HealthWeb extends WebPlugin implements HealthPlugin {
 
   async getPluginVersion(): Promise<{ version: string }> {
     return { version: 'web' };
+  }
+
+  async getPluginInfo(): Promise<PluginInfoResult> {
+    return { version: 'web', buildId: 'web' };
   }
 
   async openHealthConnectSettings(): Promise<void> {

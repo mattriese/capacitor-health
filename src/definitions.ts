@@ -227,6 +227,18 @@ export interface GetChangesResult {
   tokenExpired: boolean;
 }
 
+export interface PluginInfoResult {
+  /** The native plugin version (semver, e.g. "7.2.14"). */
+  version: string;
+  /**
+   * Git short hash stamped at yalc push time, or "dev" if built without the
+   * push script (or "web" when running on the web stub). Use this to verify
+   * the running plugin matches the expected source version during local
+   * development against yalc.
+   */
+  buildId: string;
+}
+
 export interface HealthPlugin {
   /** Returns whether the current platform supports the native health SDK. */
   isAvailable(): Promise<AvailabilityResult>;
@@ -246,6 +258,14 @@ export interface HealthPlugin {
    * @throws An error if something went wrong
    */
   getPluginVersion(): Promise<{ version: string }>;
+
+  /**
+   * Returns build metadata for the plugin: both the semver version and a
+   * `buildId` (a git short hash stamped at yalc push time, or "dev" if built
+   * without the push script). Use this to verify the running plugin matches
+   * the expected source version when iterating locally via yalc.
+   */
+  getPluginInfo(): Promise<PluginInfoResult>;
 
   /**
    * Opens the Health Connect settings screen (Android only).
