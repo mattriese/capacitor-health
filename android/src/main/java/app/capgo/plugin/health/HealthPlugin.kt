@@ -591,7 +591,17 @@ class HealthPlugin : Plugin() {
 
     @PluginMethod
     fun getHeartRateIntervalNotificationDebugState(call: PluginCall) {
-        call.resolve(heartRateNotificationManager.getDebugState())
+        pluginScope.launch {
+            try {
+                call.resolve(heartRateNotificationManager.getDebugState())
+            } catch (e: Exception) {
+                call.reject(
+                    e.message ?: "Failed to get HR interval notification debug state.",
+                    null,
+                    e
+                )
+            }
+        }
     }
 
     private fun parseHeartRateNotificationConfigs(

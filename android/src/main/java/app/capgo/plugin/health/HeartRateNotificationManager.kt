@@ -27,7 +27,6 @@ import org.json.JSONObject
 import java.time.Duration
 import java.time.Instant
 import kotlin.math.absoluteValue
-import kotlin.math.roundToInt
 
 class HeartRateNotificationManager(private val context: Context) {
 
@@ -206,7 +205,7 @@ class HeartRateNotificationManager(private val context: Context) {
         notificationManager.notify(notificationIdForCommitment(commitmentId), notification)
     }
 
-    fun getDebugState(): JSObject {
+    suspend fun getDebugState(): JSObject {
         val generatedAt = prefs().getString(KEY_GENERATED_AT, null)
         val configsArray = JSArray()
         loadConfigs().forEach { config ->
@@ -237,8 +236,13 @@ class HeartRateNotificationManager(private val context: Context) {
         }
 
         val availability = backgroundReadAvailability()
-        val granted = getClientOrNull()?.let { client -> runCatching { isBackgroundReadGranted(client) }.getOrDefault(false) }
-            ?: false
+        val granted = getClientOrNull()?.let { client ->
+            try {
+                isBackgroundReadGranted(client)
+            } catch (_: Exception) {
+                false
+            }
+        } ?: false
 
         return JSObject().apply {
             put("generatedAt", generatedAt)
@@ -260,7 +264,7 @@ class HeartRateNotificationManager(private val context: Context) {
     }
 
     @OptIn(ExperimentalFeatureAvailabilityApi::class)
-    fun isBackgroundReadGranted(client: HealthConnectClient): Boolean {
+    suspend fun isBackgroundReadGranted(client: HealthConnectClient): Boolean {
         val available = client.features.getFeatureStatus(
             HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND
         ) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
@@ -408,7 +412,7 @@ class HeartRateNotificationManager(private val context: Context) {
                     samples.add(
                         HeartRateNotificationSample(
                             observedAt = sample.time,
-                            bpm = sample.beatsPerMinute.roundToInt()
+                            bpm = sample.beatsPerMinute.toInt()
                         )
                     )
                 }
