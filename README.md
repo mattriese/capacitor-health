@@ -302,6 +302,11 @@ const { samples: avgHR } = await Health.queryAggregated({
 * [`queryAggregated(...)`](#queryaggregated)
 * [`getChangesToken(...)`](#getchangestoken)
 * [`getChanges(...)`](#getchanges)
+* [`checkBackgroundReadPermission()`](#checkbackgroundreadpermission)
+* [`requestBackgroundReadPermission()`](#requestbackgroundreadpermission)
+* [`configureHeartRateIntervalNotifications(...)`](#configureheartrateintervalnotifications)
+* [`clearHeartRateIntervalNotifications()`](#clearheartrateintervalnotifications)
+* [`getHeartRateIntervalNotificationDebugState()`](#getheartrateintervalnotificationdebugstate)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
 
@@ -537,6 +542,71 @@ On iOS: runs HKAnchoredObjectQuery from the saved anchor.
 --------------------
 
 
+### checkBackgroundReadPermission()
+
+```typescript
+checkBackgroundReadPermission() => Promise<BackgroundReadPermissionResult>
+```
+
+Checks whether Android Health Connect background reads are available and granted.
+
+**Returns:** <code>Promise&lt;<a href="#backgroundreadpermissionresult">BackgroundReadPermissionResult</a>&gt;</code>
+
+--------------------
+
+
+### requestBackgroundReadPermission()
+
+```typescript
+requestBackgroundReadPermission() => Promise<BackgroundReadPermissionResult>
+```
+
+Requests Android Health Connect background-read permission when supported.
+
+**Returns:** <code>Promise&lt;<a href="#backgroundreadpermissionresult">BackgroundReadPermissionResult</a>&gt;</code>
+
+--------------------
+
+
+### configureHeartRateIntervalNotifications(...)
+
+```typescript
+configureHeartRateIntervalNotifications(options: ConfigureHeartRateIntervalNotificationsOptions) => Promise<void>
+```
+
+Configures Android-native heart-rate interval reminder ownership.
+
+| Param         | Type                                                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **`options`** | <code><a href="#configureheartrateintervalnotificationsoptions">ConfigureHeartRateIntervalNotificationsOptions</a></code> |
+
+--------------------
+
+
+### clearHeartRateIntervalNotifications()
+
+```typescript
+clearHeartRateIntervalNotifications() => Promise<void>
+```
+
+Clears Android-native heart-rate interval reminder ownership.
+
+--------------------
+
+
+### getHeartRateIntervalNotificationDebugState()
+
+```typescript
+getHeartRateIntervalNotificationDebugState() => Promise<HeartRateIntervalNotificationDebugState>
+```
+
+Returns Android-native HR reminder debug state.
+
+**Returns:** <code>Promise&lt;<a href="#heartrateintervalnotificationdebugstate">HeartRateIntervalNotificationDebugState</a>&gt;</code>
+
+--------------------
+
+
 ### Interfaces
 
 
@@ -714,6 +784,63 @@ On iOS: runs HKAnchoredObjectQuery from the saved anchor.
 | -------------- | --------------------------------------------------------- | --------------------------------------------------------------------- |
 | **`dataType`** | <code><a href="#healthdatatype">HealthDataType</a></code> | The data type to query changes for. Must match the token's data type. |
 | **`token`**    | <code>string</code>                                       | The token from a previous getChangesToken or getChanges call.         |
+
+
+#### BackgroundReadPermissionResult
+
+| Prop            | Type                 | Description                                                               |
+| --------------- | -------------------- | ------------------------------------------------------------------------- |
+| **`available`** | <code>boolean</code> | Whether the Health Connect background-read feature exists on this device. |
+| **`granted`**   | <code>boolean</code> | Whether background reads are currently granted.                           |
+
+
+#### ConfigureHeartRateIntervalNotificationsOptions
+
+| Prop              | Type                                                   |
+| ----------------- | ------------------------------------------------------ |
+| **`generatedAt`** | <code>string</code>                                    |
+| **`commitments`** | <code>HeartRateIntervalNotificationCommitment[]</code> |
+
+
+#### HeartRateIntervalNotificationCommitment
+
+| Prop                       | Type                                 |
+| -------------------------- | ------------------------------------ |
+| **`commitmentId`**         | <code>string</code>                  |
+| **`taskName`**             | <code>string</code>                  |
+| **`thresholdBpm`**         | <code>number</code>                  |
+| **`maxOrMin`**             | <code>'min' \| 'max'</code>          |
+| **`intervalInMinutes`**    | <code>number</code>                  |
+| **`completionMetric`**     | <code>number</code>                  |
+| **`completionMetricType`** | <code>'seconds' \| 'quantity'</code> |
+| **`timePeriodStartAt`**    | <code>string</code>                  |
+| **`timePeriodEndAt`**      | <code>string</code>                  |
+| **`reminderLeadMinutes`**  | <code>number</code>                  |
+| **`staleAfterMinutes`**    | <code>number</code>                  |
+
+
+#### HeartRateIntervalNotificationDebugState
+
+| Prop                          | Type                                                   |
+| ----------------------------- | ------------------------------------------------------ |
+| **`generatedAt`**             | <code>string \| null</code>                            |
+| **`commitments`**             | <code>HeartRateIntervalNotificationCommitment[]</code> |
+| **`scheduledReminders`**      | <code>ScheduledHeartRateIntervalReminder[]</code>      |
+| **`nextReconcileAt`**         | <code>string \| null</code>                            |
+| **`lastReconciledAt`**        | <code>string \| null</code>                            |
+| **`backgroundReadAvailable`** | <code>boolean</code>                                   |
+| **`backgroundReadGranted`**   | <code>boolean</code>                                   |
+
+
+#### ScheduledHeartRateIntervalReminder
+
+| Prop               | Type                |
+| ------------------ | ------------------- |
+| **`commitmentId`** | <code>string</code> |
+| **`title`**        | <code>string</code> |
+| **`body`**         | <code>string</code> |
+| **`scheduleAt`**   | <code>string</code> |
+| **`dueAt`**        | <code>string</code> |
 
 
 ### Type Aliases

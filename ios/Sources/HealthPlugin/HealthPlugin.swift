@@ -19,7 +19,12 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "queryWorkouts", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "queryAggregated", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getChangesToken", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "getChanges", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getChanges", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "checkBackgroundReadPermission", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "requestBackgroundReadPermission", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "configureHeartRateIntervalNotifications", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearHeartRateIntervalNotifications", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getHeartRateIntervalNotificationDebugState", returnType: CAPPluginReturnPromise)
     ]
 
     private let implementation = Health()
@@ -259,6 +264,40 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
         } catch {
             call.reject(error.localizedDescription, nil, error)
         }
+    }
+
+    @objc func checkBackgroundReadPermission(_ call: CAPPluginCall) {
+        call.resolve([
+            "available": false,
+            "granted": false
+        ])
+    }
+
+    @objc func requestBackgroundReadPermission(_ call: CAPPluginCall) {
+        call.resolve([
+            "available": false,
+            "granted": false
+        ])
+    }
+
+    @objc func configureHeartRateIntervalNotifications(_ call: CAPPluginCall) {
+        call.resolve()
+    }
+
+    @objc func clearHeartRateIntervalNotifications(_ call: CAPPluginCall) {
+        call.resolve()
+    }
+
+    @objc func getHeartRateIntervalNotificationDebugState(_ call: CAPPluginCall) {
+        call.resolve([
+            "generatedAt": NSNull(),
+            "commitments": [],
+            "scheduledReminders": [],
+            "nextReconcileAt": NSNull(),
+            "lastReconciledAt": NSNull(),
+            "backgroundReadAvailable": false,
+            "backgroundReadGranted": false
+        ])
     }
 
 }

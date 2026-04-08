@@ -227,6 +227,50 @@ export interface GetChangesResult {
   tokenExpired: boolean;
 }
 
+export interface BackgroundReadPermissionResult {
+  /** Whether the Health Connect background-read feature exists on this device. */
+  available: boolean;
+  /** Whether background reads are currently granted. */
+  granted: boolean;
+}
+
+export interface HeartRateIntervalNotificationCommitment {
+  commitmentId: string;
+  taskName: string;
+  thresholdBpm: number;
+  maxOrMin: 'max' | 'min';
+  intervalInMinutes: number;
+  completionMetric: number;
+  completionMetricType: 'seconds' | 'quantity';
+  timePeriodStartAt: string;
+  timePeriodEndAt: string;
+  reminderLeadMinutes: number;
+  staleAfterMinutes: number;
+}
+
+export interface ConfigureHeartRateIntervalNotificationsOptions {
+  generatedAt: string;
+  commitments: HeartRateIntervalNotificationCommitment[];
+}
+
+export interface ScheduledHeartRateIntervalReminder {
+  commitmentId: string;
+  title: string;
+  body: string;
+  scheduleAt: string;
+  dueAt: string;
+}
+
+export interface HeartRateIntervalNotificationDebugState {
+  generatedAt: string | null;
+  commitments: HeartRateIntervalNotificationCommitment[];
+  scheduledReminders: ScheduledHeartRateIntervalReminder[];
+  nextReconcileAt: string | null;
+  lastReconciledAt: string | null;
+  backgroundReadAvailable: boolean;
+  backgroundReadGranted: boolean;
+}
+
 export interface PluginInfoResult {
   /** The native plugin version (semver, e.g. "7.2.14"). */
   version: string;
@@ -345,4 +389,17 @@ export interface HealthPlugin {
    * @throws An error if the data type is unsupported or Health SDK is unavailable
    */
   getChanges(options: GetChangesOptions): Promise<GetChangesResult>;
+
+  /** Checks whether Android Health Connect background reads are available and granted. */
+  checkBackgroundReadPermission(): Promise<BackgroundReadPermissionResult>;
+  /** Requests Android Health Connect background-read permission when supported. */
+  requestBackgroundReadPermission(): Promise<BackgroundReadPermissionResult>;
+  /** Configures Android-native heart-rate interval reminder ownership. */
+  configureHeartRateIntervalNotifications(
+    options: ConfigureHeartRateIntervalNotificationsOptions
+  ): Promise<void>;
+  /** Clears Android-native heart-rate interval reminder ownership. */
+  clearHeartRateIntervalNotifications(): Promise<void>;
+  /** Returns Android-native HR reminder debug state. */
+  getHeartRateIntervalNotificationDebugState(): Promise<HeartRateIntervalNotificationDebugState>;
 }

@@ -12,7 +12,10 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.ActivityCallback
 import com.getcapacitor.annotation.CapacitorPlugin
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
+import androidx.health.connect.client.feature.ExperimentalFeatureAvailabilityApi
+import androidx.health.connect.client.permission.HealthPermission
 import java.time.Instant
 import java.time.Duration
 import java.time.format.DateTimeParseException
@@ -26,6 +29,9 @@ import kotlinx.coroutines.launch
 class HealthPlugin : Plugin() {
     private val pluginVersion = "7.2.14"
     private val manager = HealthManager()
+    private val heartRateNotificationManager by lazy {
+        HeartRateNotificationManager(context)
+    }
     private val pluginScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val permissionContract = PermissionController.createRequestPermissionResultContract()
 
@@ -497,6 +503,162 @@ class HealthPlugin : Plugin() {
             } catch (e: Exception) {
                 call.reject(e.message ?: "Failed to get changes.", null, e)
             }
+        }
+    }
+
+    @PluginMethod
+    fun checkBackgroundReadPermission(call: PluginCall) {
+        pluginScope.launch {
+            val client = getClientOrReject(call) ?: return@launch
+            call.resolve(backgroundReadPermissionPayload(client))
+        }
+    }
+
+    @PluginMethod
+    fun requestBackgroundReadPermission(call: PluginCall) {
+        pluginScope.launch {
+            val client = getClientOrReject(call) ?: return@launch
+            val current = backgroundReadPermissionPayload(client)
+            if (!(current.getBool("available") ?: false) || (current.getBool("granted") ?: false)) {
+                call.resolve(current)
+                return@launch
+            }
+
+            val intent = permissionContract.createIntent(
+                context,
+                setOf(HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND)
+            )
+
+            try {
+                startActivityForResult(call, intent, "handleBackgroundReadPermissionResult")
+            } catch (e: Exception) {
+                call.reject("Failed to launch Health Connect background-read permission request.", null, e)
+            }
+        }
+    }
+
+    @ActivityCallback
+    private fun handleBackgroundReadPermissionResult(call: PluginCall?, result: ActivityResult) {
+        if (call == null) {
+            return
+        }
+
+        pluginScope.launch {
+            val client = getClientOrReject(call) ?: return@launch
+            call.resolve(backgroundReadPermissionPayload(client))
+        }
+    }
+
+    @PluginMethod
+    fun configureHeartRateIntervalNotifications(call: PluginCall) {
+        val generatedAt = call.getString("generatedAt")
+        if (generatedAt.isNullOrBlank()) {
+            call.reject("generatedAt is required")
+            return
+        }
+
+        val commitmentsArray = call.getArray("commitments") ?: JSArray()
+        val commitments = try {
+            parseHeartRateNotificationConfigs(commitmentsArray)
+        } catch (e: IllegalArgumentException) {
+            call.reject(e.message, null, e)
+            return
+        }
+
+        pluginScope.launch {
+            try {
+                heartRateNotificationManager.configureHeartRateIntervalNotifications(
+                    generatedAt = generatedAt,
+                    commitments = commitments,
+                    now = Instant.now()
+                )
+                call.resolve()
+            } catch (e: Exception) {
+                call.reject(
+                    e.message ?: "Failed to configure HR interval notifications.",
+                    null,
+                    e
+                )
+            }
+        }
+    }
+
+    @PluginMethod
+    fun clearHeartRateIntervalNotifications(call: PluginCall) {
+        heartRateNotificationManager.clearHeartRateIntervalNotifications()
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun getHeartRateIntervalNotificationDebugState(call: PluginCall) {
+        call.resolve(heartRateNotificationManager.getDebugState())
+    }
+
+    private fun parseHeartRateNotificationConfigs(
+        array: JSArray
+    ): List<HeartRateIntervalNotificationConfig> {
+        return (0 until array.length()).map { index ->
+            val obj = array.getJSONObject(index)
+            val commitmentId = obj.optString("commitmentId")
+            val taskName = obj.optString("taskName")
+            val thresholdBpm = obj.optInt("thresholdBpm", 0)
+            val maxOrMin = obj.optString("maxOrMin")
+            val intervalInMinutes = obj.optInt("intervalInMinutes", 0)
+            val completionMetric = obj.optInt("completionMetric", 0)
+            val completionMetricType = obj.optString("completionMetricType")
+            val timePeriodStartAt = obj.optString("timePeriodStartAt")
+            val timePeriodEndAt = obj.optString("timePeriodEndAt")
+            val reminderLeadMinutes = obj.optInt("reminderLeadMinutes", 0)
+            val staleAfterMinutes = obj.optInt("staleAfterMinutes", 0)
+
+            if (
+                commitmentId.isNullOrBlank() ||
+                taskName.isNullOrBlank() ||
+                thresholdBpm <= 0 ||
+                maxOrMin.isNullOrBlank() ||
+                intervalInMinutes <= 0 ||
+                completionMetric <= 0 ||
+                completionMetricType.isNullOrBlank() ||
+                timePeriodStartAt.isNullOrBlank() ||
+                timePeriodEndAt.isNullOrBlank()
+            ) {
+                throw IllegalArgumentException(
+                    "Invalid heart-rate interval notification config at index $index"
+                )
+            }
+
+            HeartRateIntervalNotificationConfig(
+                commitmentId = commitmentId,
+                taskName = taskName,
+                thresholdBpm = thresholdBpm,
+                maxOrMin = maxOrMin,
+                intervalInMinutes = intervalInMinutes,
+                completionMetric = completionMetric,
+                completionMetricType = completionMetricType,
+                timePeriodStartAt = Instant.parse(timePeriodStartAt),
+                timePeriodEndAt = Instant.parse(timePeriodEndAt),
+                reminderLeadMinutes = reminderLeadMinutes,
+                staleAfterMinutes = staleAfterMinutes
+            )
+        }
+    }
+
+    @OptIn(ExperimentalFeatureAvailabilityApi::class)
+    private suspend fun backgroundReadPermissionPayload(
+        client: HealthConnectClient
+    ): JSObject {
+        val available = client.features.getFeatureStatus(
+            HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND
+        ) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
+        val granted =
+            available &&
+                client.permissionController
+                    .getGrantedPermissions()
+                    .contains(HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND)
+
+        return JSObject().apply {
+            put("available", available)
+            put("granted", granted)
         }
     }
 

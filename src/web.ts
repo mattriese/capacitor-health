@@ -75,4 +75,38 @@ export class HealthWeb extends WebPlugin implements HealthPlugin {
   async getChanges(_options: GetChangesOptions): Promise<GetChangesResult> {
     throw this.unimplemented('Changes tracking is only available on native platforms.');
   }
+
+  async checkBackgroundReadPermission() {
+    return {
+      available: false,
+      granted: false,
+    };
+  }
+
+  async requestBackgroundReadPermission() {
+    return {
+      available: false,
+      granted: false,
+    };
+  }
+
+  async configureHeartRateIntervalNotifications(): Promise<void> {
+    throw this.unimplemented('Heart-rate notification ownership is only available on Android.');
+  }
+
+  async clearHeartRateIntervalNotifications(): Promise<void> {
+    return;
+  }
+
+  async getHeartRateIntervalNotificationDebugState() {
+    return {
+      generatedAt: null,
+      commitments: [],
+      scheduledReminders: [],
+      nextReconcileAt: null,
+      lastReconciledAt: null,
+      backgroundReadAvailable: false,
+      backgroundReadGranted: false,
+    };
+  }
 }
